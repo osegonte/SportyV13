@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-SportyBet Scraper - Clean Version
-Ready for implementation
+SportyBet Scraper - Stage 3 Clean Version
+Ready for login issue resolution and proper implementation
 """
 
 import requests
@@ -36,9 +36,7 @@ class SportyBetScraper:
         
     def setup_logging(self):
         """Setup logging configuration"""
-        # Create logs directory if it doesn't exist
         Path("logs").mkdir(exist_ok=True)
-        
         log_file = f"logs/scraper_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         
         logging.basicConfig(
@@ -51,105 +49,143 @@ class SportyBetScraper:
         )
         self.logger = logging.getLogger(__name__)
         
-    def fetch_page(self, url):
-        """Fetch a page with error handling"""
+    def inspect_page_structure(self, url, save_name):
+        """Inspect page structure for development"""
         try:
-            self.logger.info(f"Fetching: {url}")
+            self.logger.info(f"🔍 Inspecting: {url}")
             response = self.session.get(url, timeout=30)
             response.raise_for_status()
-            return response.text
-        except requests.exceptions.RequestException as e:
-            self.logger.error(f"Error fetching {url}: {e}")
-            return None
             
-    def parse_matches(self, html_content):
-        """Parse match data from HTML - TO BE IMPLEMENTED"""
+            # Save HTML for analysis
+            temp_dir = Path("temp")
+            temp_dir.mkdir(exist_ok=True)
+            
+            html_file = temp_dir / f"{save_name}_{datetime.now().strftime('%H%M%S')}.html"
+            with open(html_file, 'w', encoding='utf-8') as f:
+                f.write(response.text)
+            
+            self.logger.info(f"📄 Page saved to: {html_file}")
+            self.logger.info(f"📏 Page size: {len(response.text):,} characters")
+            
+            # Quick analysis
+            soup = BeautifulSoup(response.text, 'html.parser')
+            self.logger.info(f"📊 Page analysis:")
+            self.logger.info(f"  • Title: {soup.title.string if soup.title else 'No title'}")
+            self.logger.info(f"  • Scripts: {len(soup.find_all('script'))}")
+            self.logger.info(f"  • Total elements: {len(soup.find_all())}")
+            
+            return response.text
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error inspecting {url}: {e}")
+            return None
+        
+    def parse_matches(self, html_content, source="unknown"):
+        """Parse match data from HTML - PLACEHOLDER FOR IMPLEMENTATION"""
         soup = BeautifulSoup(html_content, 'html.parser')
-        
-        self.logger.info("Parsing matches from HTML...")
-        
-        # TODO: Implement actual parsing logic
-        # This is a placeholder
         matches = []
         
-        # Example structure for match data:
-        # match = {
-        #     'home_team': 'Team A',
-        #     'away_team': 'Team B',
-        #     'match_time': '2025-07-04 15:00',
-        #     'odds': {'1': 1.50, 'X': 3.20, '2': 6.00},
-        #     'competition': 'Premier League'
-        # }
+        self.logger.info(f"🔍 Analyzing {source} page structure...")
+        
+        # Check if this is the SPA loading page
+        app_div = soup.find('div', {'id': 'app'})
+        if app_div and 'logoLoading' in str(soup):
+            self.logger.warning(f"⚠️ {source} is loading page, content is rendered by JavaScript")
+            self.logger.info("💡 This confirms SportyBet uses a Single Page Application (SPA)")
+            self.logger.info("🎯 Next step: Use Selenium or API endpoints for dynamic content")
+            return matches
+        
+        # Look for potential match containers (placeholder logic)
+        potential_selectors = [
+            '.match', '.game', '.fixture', '.event',
+            '[class*="match"]', '[class*="game"]', '[class*="event"]',
+            'tbody tr', 'li[class*="event"]'
+        ]
+        
+        for selector in potential_selectors:
+            elements = soup.select(selector)
+            if elements:
+                self.logger.info(f"✅ Found {len(elements)} elements with selector: {selector}")
+                break
+        else:
+            self.logger.info(f"ℹ️ No match elements found with common selectors")
         
         return matches
         
     def scrape_upcoming_matches(self):
         """Scrape upcoming matches"""
-        self.logger.info("Scraping upcoming matches...")
-        html = self.fetch_page(SPORTYBET_UPCOMING_URL)
+        self.logger.info("🔍 Scraping upcoming matches...")
+        
+        # First inspect the page structure
+        html = self.inspect_page_structure(SPORTYBET_UPCOMING_URL, "upcoming_matches")
         
         if html:
-            matches = self.parse_matches(html)
+            matches = self.parse_matches(html, "upcoming")
             self.matches_data.extend(matches)
             self.logger.info(f"Found {len(matches)} upcoming matches")
             
     def scrape_live_matches(self):
         """Scrape live matches"""
-        self.logger.info("Scraping live matches...")
-        html = self.fetch_page(SPORTYBET_LIVE_URL)
+        self.logger.info("🔍 Scraping live matches...")
+        
+        # First inspect the page structure  
+        html = self.inspect_page_structure(SPORTYBET_LIVE_URL, "live_matches")
         
         if html:
-            matches = self.parse_matches(html)
+            matches = self.parse_matches(html, "live")
             self.matches_data.extend(matches)
             self.logger.info(f"Found {len(matches)} live matches")
             
     def save_data(self):
         """Save scraped data to file"""
-        if not self.matches_data:
-            self.logger.warning("No data to save")
-            return
-            
-        # Create output directory
         output_dir = Path("data/raw")
         output_dir.mkdir(parents=True, exist_ok=True)
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        json_path = output_dir / f"sportybet_matches_{timestamp}.json"
+        json_path = output_dir / f"sportybet_stage3_{timestamp}.json"
         
-        # Save as JSON
+        # Create summary report
+        report = {
+            'timestamp': timestamp,
+            'status': 'analysis_complete',
+            'findings': {
+                'sportybet_is_spa': True,
+                'requires_javascript': True,
+                'recommended_approach': 'selenium_or_api',
+                'matches_found': len(self.matches_data)
+            },
+            'matches_data': self.matches_data,
+            'next_steps': [
+                'Fix authentication in authenticated_scraper.py',
+                'Use Selenium for dynamic content',
+                'Discover API endpoints',
+                'Implement proper match parsing'
+            ]
+        }
+        
+        # Save report
         with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(self.matches_data, f, indent=2, ensure_ascii=False)
+            json.dump(report, f, indent=2, ensure_ascii=False)
             
-        self.logger.info(f"Data saved to {json_path}")
-        
-        # Also save as CSV if we have data
-        if self.matches_data:
-            try:
-                df = pd.DataFrame(self.matches_data)
-                csv_path = json_path.with_suffix('.csv')
-                df.to_csv(csv_path, index=False)
-                self.logger.info(f"CSV saved to {csv_path}")
-            except Exception as e:
-                self.logger.error(f"Error saving CSV: {e}")
+        self.logger.info(f"📊 Analysis report saved to {json_path}")
                 
     def run(self):
         """Main scraping method"""
-        self.logger.info("🚀 Starting SportyBet scraper...")
+        self.logger.info("🚀 Starting SportyBet Stage 3 Analysis...")
         
         try:
-            # Scrape upcoming matches
+            # Analyze both page types
             self.scrape_upcoming_matches()
-            
-            # Scrape live matches  
             self.scrape_live_matches()
             
-            # Save all data
+            # Save analysis report
             self.save_data()
             
-            self.logger.info(f"✅ Scraping completed! Total matches: {len(self.matches_data)}")
+            self.logger.info("✅ Stage 3 analysis completed!")
+            self.logger.info("🎯 Ready for authentication fix and dynamic content handling")
             
         except Exception as e:
-            self.logger.error(f"❌ Error during scraping: {e}")
+            self.logger.error(f"❌ Error during analysis: {e}")
             raise
 
 if __name__ == "__main__":
